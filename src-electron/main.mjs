@@ -12,7 +12,19 @@ const isDev = process.env.ELECTRON_DEV === '1'
 const TOOL_PATH = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin'
 const env = { ...process.env, PATH: `${TOOL_PATH}:${process.env.PATH}` }
 
+function resolveFFmpeg() {
+  for (const bin of ['ffmpeg-dl', 'ffmpeg']) {
+    try { execSync(`which ${bin}`, { env }); return bin } catch { /* try next */ }
+  }
+  return null
+}
+
 const INSTALL_LINKS = [
+  {
+    label: 'dvrescue (MediaArea)',
+    url: 'https://mediaarea.net/DVRescue',
+    brew: 'brew install mediaarea/homebrew-mediaarea/dvrescue',
+  },
   {
     label: 'Blackmagic Desktop Video 12.8',
     url: 'https://www.blackmagicdesign.com/support/download/29a0964238eb45f9a5ae8b6a477a49f6/Mac%20OS%20X',
@@ -105,7 +117,22 @@ function showCaptureSetup() {
 function buildMenu() {
   const installItems = INSTALL_LINKS.map((item) => ({
     label: item.label,
-    click: () => shell.openExternal(item.url),
+    click: () => {
+      if (item.brew) {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: item.label,
+          message: 'Install via Homebrew',
+          detail: `Run this command in Terminal:\n\n${item.brew}`,
+          buttons: ['Open Website', 'Close'],
+          cancelId: 1,
+        }).then(({ response }) => {
+          if (response === 0) shell.openExternal(item.url)
+        })
+      } else {
+        shell.openExternal(item.url)
+      }
+    },
   }))
 
   const template = [
@@ -159,7 +186,7 @@ ipcMain.handle('check-deps', () => {
     try { execSync(`which ${cmd}`, { env }); return true } catch { return false }
   }
   return {
-    ffmpegDl: check('ffmpeg-dl'),
+    ffmpegDl: resolveFFmpeg() !== null,
     dvrescue: check('dvrescue'),
     installLinks: INSTALL_LINKS,
   }
@@ -169,7 +196,9 @@ ipcMain.handle('check-deps', () => {
 
 ipcMain.handle('list-devices', () => {
   return new Promise((resolve) => {
-    const proc = spawn('ffmpeg-dl', ['-f', 'avfoundation', '-list_devices', 'true', '-i', ''], { env })
+    const ffmpeg = resolveFFmpeg()
+    if (!ffmpeg) { resolve([]); return }
+    const proc = spawn(ffmpeg, ['-f', 'avfoundation', '-list_devices', 'true', '-i', ''], { env })
 
     let stderr = ''
     proc.stderr.on('data', (d) => { stderr += d.toString() })
@@ -222,8 +251,11 @@ ipcMain.handle('start-capture', async (_, { device, dest, filename, overwrite })
 
   // Merge dvrescue stderr into stdout so both stream to the log in real-time.
   // ffmpeg-dl stderr is redirected to /dev/null to suppress its own noise.
+  const ffmpeg = resolveFFmpeg()
+  if (!ffmpeg) return { error: 'ffmpeg not found' }
+
   const cmd = [
-    'ffmpeg-dl', '-f', 'avfoundation', '-capture_raw_data', 'true',
+    ffmpeg, '-f', 'avfoundation', '-capture_raw_data', 'true',
     '-i', device, '-c', 'copy', '-f', 'dv', '-', '2>/dev/null',
     '|', 'tee', `"${outputPath}"`,
     '|', 'dvrescue', '-', '2>&1',

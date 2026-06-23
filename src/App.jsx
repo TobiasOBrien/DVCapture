@@ -145,10 +145,9 @@ export default function App() {
         <div className="dep-banner">
           <strong>Missing required software</strong>
           <ul>
-            {!deps.ffmpegDl && <li>ffmpeg-dl not found</li>}
-            {!deps.dvrescue && <li>dvrescue not found</li>}
+            {!deps.ffmpegDl && <li>ffmpeg not found — install via <code>brew install ffmpeg</code></li>}
+            {!deps.dvrescue && <li>dvrescue not found — see the <strong>Install</strong> menu, or run:<br /><code>brew install mediaarea/homebrew-mediaarea/dvrescue</code></li>}
           </ul>
-          <p>Download and install from the <strong>Install</strong> menu, then relaunch the app.</p>
           <div className="dep-links">
             {deps.installLinks.map((link) => (
               <a
